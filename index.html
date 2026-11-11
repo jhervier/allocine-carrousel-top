@@ -87,7 +87,9 @@ input:focus-visible,button:focus-visible,input[type=range]:focus-visible{outline
 .textshead .trash{margin-left:auto;font-size:16px;padding:5px 10px}
 .copy-row{display:flex;gap:8px;align-items:stretch;min-width:0}
 .copy-row input{flex:1 1 auto;min-width:0}
-#copySym{flex:0 0 auto;width:44px;padding:0;font:500 20px Arial,sans-serif}
+#copySym{flex:0 0 auto;align-self:flex-start;width:44px;height:42px;padding:0;font:500 20px Arial,sans-serif}
+.copy-row textarea{flex:1 1 auto;min-width:0;width:100%;height:auto;min-height:0;font:500 17px/1.3 var(--ui);color:var(--fg);background:#0e0e0f;border:1px solid var(--line);border-radius:4px;padding:9px 11px;resize:vertical;overflow:auto}
+.copy-row textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .fontbox{border:1px dashed #5a4a20;border-radius:5px;padding:10px 12px;margin-bottom:12px;font-size:14px;color:var(--fg);display:grid;gap:8px}
 .fontbox[hidden]{display:none}
 .fontbox button{justify-self:start;padding:7px 12px;font-size:14px}
@@ -151,8 +153,6 @@ button:disabled{opacity:.4;cursor:not-allowed;filter:none}
 .autolab{font-size:14px;color:var(--muted)}
 .autolab b{color:var(--fg);font:italic 700 16px 'wayfinder-cf','Playfair Display',Georgia,serif;letter-spacing:.02em}
 .boldtools{display:contents}
-.fontwarn{border:1px solid var(--danger);color:var(--danger);border-radius:6px;padding:10px 14px;font-size:14px}
-.fontwarn[hidden]{display:none}
 .boldtools[hidden]{display:none}
 .projrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
 .projrow button{padding:8px 12px;font-size:14px}
@@ -195,7 +195,6 @@ button:disabled{opacity:.4;cursor:not-allowed;filter:none}
       </div>
       <div class="status" id="status3" role="status" aria-live="polite"></div>
     </div>
-    <div class="fontwarn" id="fontWarn" hidden>Une police Adobe Fonts n’est pas encore chargée (le texte serait trop gras ou trop large). Recharge la page avec <b>Ctrl+F5</b>.</div>
 
     <fieldset>
       <legend id="imgLegend">Photo de fond · slide 1</legend>
@@ -267,7 +266,7 @@ button:disabled{opacity:.4;cursor:not-allowed;filter:none}
         <label for="copyr">Copyright</label>
         <div class="copy-row">
           <button type="button" id="copySym" title="Ajouter ©" aria-label="Ajouter le symbole copyright">©</button>
-          <input type="text" id="copyr" value="" autocomplete="off" spellcheck="false">
+          <textarea id="copyr" rows="3" autocomplete="off" spellcheck="false" placeholder="Entrée pour aller à la ligne, 3 lignes maximum"></textarea>
         </div>
       </div>
     </fieldset>
@@ -315,7 +314,7 @@ var SPEC = {
 var YEAR_UP = 1266.1;                       /* note décochée : le texte libre prend la place de la note */
 var RATE  = { font:'800 45px ' + DELIGHT, hs:0.99, left:585.98, baseline:1272.58, color:YELLOW };
 var LABEL = { font:'italic 700 45px ' + WAYF, hs:1.0126, left:99.71, baseline:1073.12, color:'#ffffff' };
-var COPY  = { size:15.2, cx:540, baseline:1425, alpha:77/255, spacing:0.3, maxW:1000, stack:"Arial,'Helvetica Neue',Helvetica,'Liberation Sans',sans-serif" };
+var COPY  = { size:15.2, cx:540, baseline:1425, alpha:77/255, spacing:0.3, maxW:1040, maxLines:3, pitch:18, stack:"Arial,'Helvetica Neue',Helvetica,'Liberation Sans',sans-serif" };
 var POSTER = { x:135, y:1081, w:199, h:282, r:7, line:2 };
 /* étoiles : calques du PSD, 5 étoiles. Bords réels de chaque étoile (x), l'écart entre étoiles n'est pas compté */
 var STAR = { fx:375, fy:1236, lx:376, ly:1237, L:[376,415,454,494,533], R:[411,450,489,529,568] };
@@ -452,6 +451,32 @@ function layout(runs, spec){
 
 /* ---------- Dessin des textes ---------- */
 function copyFont(){ return '400 ' + COPY.size + 'px ' + COPY.stack; }
+/* copyright : jusqu'à 3 lignes sur toute la largeur de l'image (20 px de marge de chaque côté),
+   centrées ; la dernière ligne garde la ligne de base du PSD, les autres montent au-dessus */
+function copyLines(t){
+  /* Entrée force un retour à la ligne ; une ligne trop longue passe à la ligne toute seule */
+  var lines = [];
+  t.replace(/\r/g,'').split('\n').forEach(function(par){
+    var line = '';
+    par.split(/[ 	]+/).filter(Boolean).forEach(function(w){
+      var test = line ? line + ' ' + w : w;
+      if (line && copyWidth(test) > COPY.maxW){ lines.push(line); line = w; } else line = test;
+    });
+    lines.push(line);
+  });
+  return lines;
+}
+function copyFits(t){
+  var L = copyLines(t);
+  return L.length <= COPY.maxLines && L.every(function(l){ return copyWidth(l) <= COPY.maxW; });
+}
+function drawCopyLines(g, t, shadow){
+  var L = copyLines(t);
+  L.forEach(function(l, k){
+    var y = COPY.baseline - (L.length - 1 - k)*COPY.pitch, x = COPY.cx - copyWidth(l)/2;
+    for (var i=0;i<l.length;i++){ if (shadow) g.strokeText(l[i], x, y); g.fillText(l[i], x, y); x += g.measureText(l[i]).width + COPY.spacing; }
+  });
+}
 function copyWidth(t){ mctx.font = copyFont(); return mctx.measureText(t).width + Math.max(0, t.length-1) * COPY.spacing; }
 
 /* écrit un morceau de texte avec étirement horizontal et approche, lettre par lettre si besoin */
@@ -480,8 +505,7 @@ function drawBlock(g, L, spec, shadow, firstY){
 function drawCopy(g, c){
   if (!c) return;
   g.font = copyFont();
-  var x = COPY.cx - copyWidth(c)/2;
-  for (var i=0;i<c.length;i++){ g.fillText(c[i], x, COPY.baseline); x += g.measureText(c[i]).width + COPY.spacing; }
+  drawCopyLines(g, c);
 }
 function fmtNote(v){
   var c = Math.round(v*100);
@@ -841,12 +865,25 @@ function cleanEditor(root, allowBold){
   root.innerHTML = html;
   if (off >= 0) placeCaret(root, off);
 }
+/* saisie refusée : remet l'ancien texte en laissant le curseur là où il était */
+function revert(el, v){
+  var p = el.selectionStart, d = el.value.length - v.length;
+  el.value = v;
+  if (p != null){ p = clamp(p - d, 0, v.length); try { el.setSelectionRange(p, p); } catch(e){} }
+}
+function revertEditor(root, html){
+  var off = caretOffset(root), tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  var d = charCount(root) - charCount(tmp);
+  root.innerHTML = html;
+  if (off < 0) caretToEnd(root); else placeCaret(root, Math.max(0, off - d));
+}
 function checkEditor(key){
   var el = $(key), spec = SPEC[key];
   cleanEditor(el, key === 'main');
   var L = layout(readRuns(el), spec);
   if (L.lines.length > spec.max || L.tooWide){
-    el.innerHTML = ok[key]; caretToEnd(el);
+    revertEditor(el, ok[key]);
     warn(spec.lines + ' maximum pour « ' + spec.name + ' » : la dernière modification a été annulée.');
     return;
   }
@@ -876,7 +913,7 @@ $('boldBtn').addEventListener('click', function(){
 $('year').addEventListener('keydown', function(e){ if (e.key === 'Enter') e.preventDefault(); });
 $('year').addEventListener('input', function(){
   var L = layout(plainRuns(this.value.trim()), SPEC.year);
-  if (L.lines.length > 1 || L.tooWide){ this.value = ok.year; warn('Texte libre trop long pour tenir sur une ligne : la dernière modification a été annulée.'); return; }
+  if (L.lines.length > 1 || L.tooWide){ revert(this, ok.year); warn('Texte libre trop long pour tenir sur une ligne : la dernière modification a été annulée.'); return; }
   recordFor('year'); ok.year = this.value; S().year = this.value; schedule();
 });
 /* note : case, curseur et saisie au clavier (2 chiffres après la virgule max) */
@@ -893,7 +930,7 @@ $('rateTx').addEventListener('input', function(){
   var t = this.value.replace(/\s/g,'');
   if (t === '') return;
   if (!/^\d([.,]\d{0,2})?$/.test(t) || +t.replace(',', '.') > 5){
-    this.value = okRate; warn('La note va de 0 à 5, avec 2 chiffres après la virgule maximum (ex. 3,83).'); return;
+    revert(this, okRate); warn('La note va de 0 à 5, avec 2 chiffres après la virgule maximum (ex. 3,83).'); return;
   }
   okRate = this.value;
   recordFor('rateTx'); var v = +t.replace(',', '.'); S().note = v; $('rateSl').value = v; schedule();
@@ -907,7 +944,7 @@ $('rateTx').addEventListener('keydown', function(e){
   }
 });
 $('copyr').addEventListener('input', function(){
-  if (copyWidth(this.value.trim()) > COPY.maxW){ this.value = ok.copyr; warn('Copyright trop long pour tenir sur une ligne.'); return; }
+  if (!copyFits(this.value.replace(/^\s+/, ''))){ revert(this, ok.copyr); warn('Copyright : 3 lignes maximum, la dernière modification a été annulée.'); return; }
   recordFor('copyr'); ok.copyr = this.value; S().copyr = this.value; schedule();
 });
 $('copySym').addEventListener('mousedown', function(e){ e.preventDefault(); });
@@ -1145,9 +1182,9 @@ function exportAll(type){
           .catch(function(){ done("La création du .zip a échoué.", 'err'); });
       } else {
         var k = 0;
-        (function one(){
+        (function step(){
           if (k >= out.length){ done(one ? 'Image ' + out[0].name + ' téléchargée.' : out.length + ' images .' + ext + ' téléchargées. Si le navigateur demande l’autorisation de télécharger plusieurs fichiers, accepte-la.', 'ok'); return; }
-          save(out[k].blob, out[k].name); k++; setTimeout(one, 350);
+          save(out[k].blob, out[k].name); k++; setTimeout(step, 350);
         })();
       }
       return;
@@ -1375,17 +1412,6 @@ if (document.fonts && document.fonts.load){
     document.fonts.load(SPEC.title.font(),'TITRE DU FILM')
   ]).catch(function(){}).then(fontsChanged);
   document.fonts.ready.then(fontsChanged);
-  /* vérifie que les graisses ajoutées au kit Adobe Fonts sont bien là (un ancien kit peut rester en cache) */
-  setTimeout(function(){
-    document.fonts.ready.then(function(){
-      var need = { 'wayfinder-cf|italic|400':0, 'stratos|normal|400':0 }, any = false;
-      document.fonts.forEach(function(f){
-        var k = f.family.replace(/["']/g,'') + '|' + f.style + '|' + f.weight;
-        if (k in need) need[k] = 1; if (/stratos|wayfinder/i.test(f.family)) any = true;
-      });
-      $('fontWarn').hidden = !any || (need['wayfinder-cf|italic|400'] && need['stratos|normal|400']);
-    });
-  }, 1500);
 }
 loadDelight().then(fontsChanged);
 updateName(); buildStrip(); loadPanel();
